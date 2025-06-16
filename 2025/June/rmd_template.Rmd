@@ -1,0 +1,366 @@
+---
+title: "Atlas Labs HR Analytics Report"
+subtitle: "Employee Attrition & Performance Analysis"
+author: "Atlas Labs HR Analytics Dashboard"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    code_folding: hide
+    fig_width: 10
+    fig_height: 6
+  pdf_document:
+    toc: true
+    number_sections: true
+    fig_width: 10
+    fig_height: 6
+params:
+  data_summary: NULL
+  selected_filters: NULL
+  analysis_date: NULL
+  kpi_metrics: NULL
+  attrition_analysis: NULL
+  performance_data: NULL
+  satisfaction_metrics: NULL
+  compensation_analysis: NULL
+  recommendations: NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  dpi = 300
+)
+
+# Load required libraries
+library(tidyverse)
+library(plotly)
+library(DT)
+library(knitr)
+library(kableExtra)
+```
+
+```{css, echo=FALSE}
+/* Custom CSS for professional report styling */
+.main-container {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.kpi-box {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  margin: 10px;
+}
+
+.recommendation-box {
+  background-color: #f8f9fa;
+  border-left: 4px solid #28a745;
+  padding: 15px;
+  margin: 10px 0;
+}
+
+h1, h2 { color: #2c3e50; }
+h3, h4 { color: #34495e; }
+```
+
+# Executive Summary {.tabset}
+
+## Key Findings
+
+```{r executive-summary}
+# Display key metrics from params
+if (!is.null(params$kpi_metrics)) {
+  kpi_data <- params$kpi_metrics
+  
+  cat("### Atlas Labs Workforce Overview\n\n")
+  cat("**Analysis Period:** ", format(Sys.Date(), "%B %Y"), "\n\n")
+  
+  # Create KPI summary
+  if ("total_employees" %in% names(kpi_data)) {
+    cat("- **Total Employees:** ", kpi_data$total_employees, "\n")
+  }
+  if ("attrition_rate" %in% names(kpi_data)) {
+    cat("- **Overall Attrition Rate:** ", 
+        scales::percent(kpi_data$attrition_rate, accuracy = 0.1), "\n")
+  }
+  if ("avg_satisfaction" %in% names(kpi_data)) {
+    cat("- **Average Job Satisfaction:** ", 
+        round(kpi_data$avg_satisfaction, 1), "/5.0\n")
+  }
+  if ("avg_salary" %in% names(kpi_data)) {
+    cat("- **Average Salary:** $", 
+        scales::comma(kpi_data$avg_salary), "\n")
+  }
+}
+```
+
+## Strategic Recommendations
+
+```{r recommendations}
+if (!is.null(params$recommendations)) {
+  for (i in seq_along(params$recommendations)) {
+    cat('<div class="recommendation-box">\n')
+    cat("**Recommendation ", i, ":** ", params$recommendations[[i]]$title, "\n\n")
+    cat(params$recommendations[[i]]$description, "\n\n")
+    cat("*Priority:* ", params$recommendations[[i]]$priority, "\n")
+    cat('</div>\n\n')
+  }
+} else {
+  cat("Recommendations will be generated based on analysis results.")
+}
+```
+
+# Workforce Demographics
+
+## Employee Distribution
+
+```{r demographics-overview}
+# Placeholder for demographic analysis
+if (!is.null(params$data_summary)) {
+  cat("### Current Workforce Composition\n\n")
+  # Add demographic charts and tables here
+  cat("*Demographic analysis charts will be inserted here from the Shiny app data.*\n\n")
+}
+```
+
+```{r demographics-charts, fig.cap="Employee Demographics Overview"}
+# Placeholder for demographic visualizations
+# These will be passed from the Shiny app modules
+plot.new()
+text(0.5, 0.5, "Demographics Visualization\n(Generated from Shiny Module)", 
+     cex = 1.5, adj = 0.5)
+```
+
+## Diversity Metrics
+
+```{r diversity-analysis}
+cat("### Diversity & Inclusion Metrics\n\n")
+cat("- Gender distribution across departments\n")
+cat("- Ethnic diversity representation\n") 
+cat("- Age distribution analysis\n")
+cat("- Geographic spread of workforce\n\n")
+```
+
+# Attrition Analysis
+
+## Attrition Trends
+
+```{r attrition-overview}
+if (!is.null(params$attrition_analysis)) {
+  cat("### Attrition Rate Analysis\n\n")
+  
+  # Display attrition metrics
+  attrition_data <- params$attrition_analysis
+  
+  if ("by_department" %in% names(attrition_data)) {
+    cat("**Attrition by Department:**\n\n")
+    dept_table <- attrition_data$by_department
+    kable(dept_table, 
+          col.names = c("Department", "Attrition Rate", "Employee Count"),
+          format = "html") %>%
+      kable_styling(bootstrap_options = c("striped", "hover"))
+  }
+}
+```
+
+```{r attrition-visualization, fig.cap="Attrition Analysis by Key Factors"}
+# Placeholder for attrition visualizations
+plot.new()
+text(0.5, 0.5, "Attrition Analysis Visualization\n(Generated from Shiny Module)", 
+     cex = 1.5, adj = 0.5)
+```
+
+## Risk Factors
+
+```{r risk-factors}
+cat("### Key Attrition Risk Factors\n\n")
+cat("1. **Tenure & Role Duration**\n")
+cat("   - Analysis of years in current role vs. attrition\n")
+cat("   - Time since last promotion impact\n\n")
+
+cat("2. **Compensation & Benefits**\n")
+cat("   - Salary competitiveness\n")
+cat("   - Stock option levels\n\n")
+
+cat("3. **Work Environment**\n")
+cat("   - Overtime requirements\n")
+cat("   - Distance from home\n")
+cat("   - Business travel frequency\n\n")
+```
+
+# Performance Analytics
+
+## Performance Distribution
+
+```{r performance-overview}
+if (!is.null(params$performance_data)) {
+  cat("### Performance Rating Analysis\n\n")
+  cat("Analysis of employee performance ratings across various dimensions.\n\n")
+}
+```
+
+```{r performance-charts, fig.cap="Performance Metrics Overview"}
+# Placeholder for performance visualizations
+plot.new()
+text(0.5, 0.5, "Performance Analysis Visualization\n(Generated from Shiny Module)", 
+     cex = 1.5, adj = 0.5)
+```
+
+## Training & Development
+
+```{r training-analysis}
+cat("### Training Opportunities Analysis\n\n")
+cat("- Training opportunities offered vs. taken\n")
+cat("- Impact of training on performance ratings\n")
+cat("- Training gaps by department and role\n")
+cat("- ROI analysis of training programs\n\n")
+```
+
+# Employee Satisfaction
+
+## Satisfaction Metrics
+
+```{r satisfaction-overview}
+if (!is.null(params$satisfaction_metrics)) {
+  cat("### Employee Satisfaction Analysis\n\n")
+  
+  satisfaction_data <- params$satisfaction_metrics
+  
+  cat("**Key Satisfaction Areas:**\n\n")
+  cat("- Job Satisfaction\n")
+  cat("- Environment Satisfaction\n") 
+  cat("- Relationship Satisfaction\n")
+  cat("- Work-Life Balance\n\n")
+}
+```
+
+```{r satisfaction-visualization, fig.cap="Employee Satisfaction Metrics"}
+# Placeholder for satisfaction visualizations
+plot.new()
+text(0.5, 0.5, "Satisfaction Analysis Visualization\n(Generated from Shiny Module)", 
+     cex = 1.5, adj = 0.5)
+```
+
+## Correlation Analysis
+
+```{r satisfaction-correlation}
+cat("### Satisfaction Impact Analysis\n\n")
+cat("Analysis of how satisfaction metrics correlate with:\n\n")
+cat("- Employee retention\n")
+cat("- Performance ratings\n")
+cat("- Career progression\n")
+cat("- Compensation levels\n\n")
+```
+
+# Compensation Analysis
+
+## Salary Distribution
+
+```{r compensation-overview}
+if (!is.null(params$compensation_analysis)) {
+  cat("### Compensation Analysis Overview\n\n")
+  cat("Comprehensive analysis of salary distribution and equity.\n\n")
+}
+```
+
+```{r compensation-charts, fig.cap="Compensation Analysis"}
+# Placeholder for compensation visualizations
+plot.new()
+text(0.5, 0.5, "Compensation Analysis Visualization\n(Generated from Shiny Module)", 
+     cex = 1.5, adj = 0.5)
+```
+
+## Pay Equity
+
+```{r pay-equity}
+cat("### Pay Equity Analysis\n\n")
+cat("- Gender pay gap analysis\n")
+cat("- Ethnic pay equity review\n")
+cat("- Department salary benchmarking\n")
+cat("- Role-based compensation comparison\n\n")
+```
+
+# Data Quality & Methodology
+
+## Data Sources
+
+```{r data-methodology}
+cat("### Data Sources & Quality\n\n")
+cat("**Primary Data Sources:**\n\n")
+cat("- Employee Master Data (employee.csv)\n")
+cat("- Performance Ratings (performance_rating.csv)\n")
+cat("- Education Levels (education_level.csv)\n\n")
+
+cat("**Data Quality Metrics:**\n\n")
+if (!is.null(params$data_summary)) {
+  if ("data_quality" %in% names(params$data_summary)) {
+    quality_metrics <- params$data_summary$data_quality
+    for (metric in names(quality_metrics)) {
+      cat("- ", metric, ": ", quality_metrics[[metric]], "\n")
+    }
+  }
+}
+
+cat("\n**Analysis Period:** ", params$analysis_date %||% "Current", "\n\n")
+```
+
+## Filters Applied
+
+```{r applied-filters}
+if (!is.null(params$selected_filters) && length(params$selected_filters) > 0) {
+  cat("### Active Filters\n\n")
+  
+  for (filter_name in names(params$selected_filters)) {
+    filter_values <- params$selected_filters[[filter_name]]
+    if (length(filter_values) > 0) {
+      cat("- **", filter_name, ":** ", paste(filter_values, collapse = ", "), "\n")
+    }
+  }
+} else {
+  cat("### Filters Applied\n\n")
+  cat("No filters applied - analysis includes all employee records.\n\n")
+}
+```
+
+# Appendix
+
+## Technical Notes
+
+```{r technical-notes}
+cat("### Technical Implementation\n\n")
+cat("- **Analysis Tool:** Atlas Labs HR Analytics Dashboard\n")
+cat("- **Report Generated:** ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+cat("- **R Version:** ", R.version.string, "\n")
+cat("- **Dashboard Version:** 1.0.0\n\n")
+
+cat("### Data Definitions\n\n")
+cat("- **Attrition Rate:** Percentage of employees who left the organization\n")
+cat("- **Satisfaction Ratings:** Scale of 1-5 (1=Very Dissatisfied, 5=Very Satisfied)\n")
+cat("- **Performance Ratings:** Scale of 1-5 (1=Poor, 5=Excellent)\n\n")
+```
+
+## Contact Information
+
+```{r contact-info}
+cat("### Report Credits\n\n")
+cat("**Developed by:** akhapwoyaco\n")
+cat("**GitHub:** https://github.com/akhapwoyaco\n")
+cat("**Data Source:** [HR Analytics Dataset](https://herdataproject.gumroad.com/l/hr-analytics-tableau)\n\n")
+cat("For questions about this analysis or the dashboard, please contact the HR Analytics team.\n\n")
+```
+
+---
+
+*This report was automatically generated by the Atlas Labs HR Analytics Dashboard. All data has been analyzed in accordance with company privacy policies and data governance standards.*
