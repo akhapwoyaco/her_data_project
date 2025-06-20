@@ -398,8 +398,8 @@ overviewServer <- function(id, data, logger) {
           rownames = FALSE,
           class = 'cell-border stripe hover'
         ) %>%
-          DT::formatRound(columns = c("Avg_Salary", "Avg_Satisfaction"), digits = 2) %>%
-          DT::formatPercentage(columns = "Attrition_Rate", digits = 1)
+          DT::formatRound(columns = c("Avg Salary", "Avg Satisfaction"), digits = 2) %>%
+          DT::formatPercentage(columns = "Attrition Rate", digits = 1)
         
       }, error = function(e) {
         logger$log_error(paste("Error generating summary statistics table:", e$message), "overview_module")

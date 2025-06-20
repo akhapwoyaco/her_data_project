@@ -285,11 +285,11 @@ server <- function(input, output, session) {
   
   # Initialize analysis modules
   overview_results <- overviewServer("overview", shared_values, atlas_logger)
-  attrition_results <- attritionServer("attrition", shared_values, atlas_logger)
-  demographics_results <- demographicsServer("demographics", shared_values, atlas_logger)
-  performance_results <- performanceServer("performance", shared_values, atlas_logger)
-  compensation_results <- compensationServer("compensation", shared_values, atlas_logger)
-  satisfaction_results <- satisfactionServer("satisfaction", shared_values, atlas_logger)
+  # attrition_results <- attritionServer("attrition", shared_values, atlas_logger)
+  # demographics_results <- demographicsServer("demographics", shared_values, atlas_logger)
+  # performance_results <- performanceServer("performance", shared_values, atlas_logger)
+  # compensation_results <- compensationServer("compensation", shared_values, atlas_logger)
+  # satisfaction_results <- satisfactionServer("satisfaction", shared_values, atlas_logger)
   
   # Initialize report module with cross-module data
   # report_data <- reactive({
