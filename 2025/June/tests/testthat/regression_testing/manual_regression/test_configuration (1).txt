@@ -1,0 +1,554 @@
+# ================================================================================
+# Atlas Labs HR Analytics - Test Configuration & CI/CD Setup
+# Author: akhapwoyaco
+# Description: Comprehensive testing configuration for automated regression testing
+# ================================================================================
+
+# GitHub Actions Workflow for Automated Testing
+name: Atlas Labs HR Analytics - Regression Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run nightly regression tests at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - unit
+        - integration
+        - performance
+        - security
+        - accessibility
+
+env:
+  R_VERSION: '4.3.2'
+  PANDOC_VERSION: '3.1.1'
+  NODE_VERSION: '18'
+  COVERAGE_THRESHOLD: '85'
+
+jobs:
+  # ================================================================================
+  # PRE-FLIGHT CHECKS
+  # ================================================================================
+  pre-flight:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run_tests: ${{ steps.changes.outputs.should_run }}
+      test_matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check for relevant changes
+      id: changes
+      uses: dorny/paths-filter@v2
+      with:
+        filters: |
+          code:
+            - 'app.R'
+            - 'global.R'
+            - 'utils.R'
+            - 'custom_theme.R'
+            - 'modules/**'
+            - 'tests/**'
+            - 'data/**'
+          config:
+            - '.github/workflows/**'
+            - 'renv.lock'
+            - 'DESCRIPTION'
+
+    - name: Generate test matrix
+      id: matrix
+      run: |
+        if [[ "${{ github.event.inputs.test_suite }}" == "all" || "${{ github.event.inputs.test_suite }}" == "" ]]; then
+          matrix='["unit", "integration", "performance", "security", "accessibility", "edge_cases"]'
+        else
+          matrix='["${{ github.event.inputs.test_suite }}"]'
+        fi
+        echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+  # ================================================================================
+  # LINTING AND CODE QUALITY
+  # ================================================================================
+  lint:
+    needs: pre-flight
+    if: needs.pre-flight.outputs.should_run_tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ env.R_VERSION }}
+
+    - name: Install lintr
+      run: |
+        install.packages("lintr")
+        install.packages("styler")
+      shell: Rscript {0}
+
+    - name: Run lintr
+      run: |
+        lintr::lint_dir(".", 
+          linters = lintr::linters_with_defaults(
+            line_length_linter(120),
+            object_name_linter("snake_case"),
+            cyclocomp_linter(15)
+          )
+        )
+      shell: Rscript {0}
+
+    - name: Check code style
+      run: |
+        styled <- styler::style_dir(".", transformers = styler::tidyverse_style())
+        if (any(styled$changed)) {
+          cat("Code style issues found. Please run styler::style_dir('.') locally.\n")
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+  # ================================================================================
+  # UNIT AND INTEGRATION TESTS
+  # ================================================================================
+  test:
+    needs: [pre-flight, lint]
+    if: needs.pre-flight.outputs.should_run_tests == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        test_suite: ${{ fromJson(needs.pre-flight.outputs.test_matrix) }}
+        exclude:
+          # Performance tests only on Ubuntu
+          - os: windows-latest
+            test_suite: performance
+          - os: macOS-latest
+            test_suite: performance
+          # Accessibility tests only on Ubuntu (headless browser)
+          - os: windows-latest
+            test_suite: accessibility
+          - os: macOS-latest
+            test_suite: accessibility
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ env.R_VERSION }}
+        use-public-rspm: true
+
+    - uses: r-lib/actions/setup-pandoc@v2
+      with:
+        pandoc-version: ${{ env.PANDOC_VERSION }}
+
+    - name: Setup Node.js (for JavaScript tests)
+      if: matrix.test_suite == 'accessibility' || matrix.test_suite == 'integration'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install system dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libcurl4-openssl-dev \
+          libssl-dev \
+          libxml2-dev \
+          libgit2-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
+          libfreetype6-dev \
+          libpng-dev \
+          libtiff5-dev \
+          libjpeg-dev \
+          xvfb
+
+    - name: Install Chrome (for accessibility tests)
+      if: matrix.test_suite == 'accessibility' && runner.os == 'Linux'
+      run: |
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+
+    - name: Query dependencies
+      run: |
+        install.packages('remotes')
+        saveRDS(remotes::dev_package_deps(dependencies = TRUE), ".github/depends.Rds", version = 2)
+        writeLines(sprintf("R-%i.%i", getRversion()$major, getRversion()$minor), ".github/R-version")
+      shell: Rscript {0}
+
+    - name: Cache R packages
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.R_LIBS_USER }}
+        key: ${{ runner.os }}-${{ hashFiles('.github/R-version') }}-1-${{ hashFiles('.github/depends.Rds') }}
+        restore-keys: ${{ runner.os }}-${{ hashFiles('.github/R-version') }}-1-
+
+    - name: Install dependencies
+      run: |
+        remotes::install_deps(dependencies = TRUE)
+        install.packages(c("testthat", "shinytest2", "covr", "DT", "plotly", "mockery", "microbenchmark"))
+      shell: Rscript {0}
+
+    - name: Create test data
+      run: |
+        source("tests/helpers/create_test_data.R")
+        create_all_test_datasets()
+      shell: Rscript {0}
+
+    - name: Run Unit Tests
+      if: matrix.test_suite == 'unit'
+      run: |
+        library(testthat)
+        test_results <- test_dir("tests/unit/", reporter = "junit")
+        if (any(as.data.frame(test_results)$failed > 0)) {
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+    - name: Run Integration Tests
+      if: matrix.test_suite == 'integration'
+      run: |
+        library(testthat)
+        library(shinytest2)
+        test_results <- test_dir("tests/integration/", reporter = "junit")
+        if (any(as.data.frame(test_results)$failed > 0)) {
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+    - name: Run Performance Tests
+      if: matrix.test_suite == 'performance'
+      run: |
+        library(testthat)
+        test_results <- test_dir("tests/performance/", reporter = "junit")
+        if (any(as.data.frame(test_results)$failed > 0)) {
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+    - name: Run Security Tests
+      if: matrix.test_suite == 'security'
+      run: |
+        library(testthat)
+        test_results <- test_dir("tests/security/", reporter = "junit")
+        if (any(as.data.frame(test_results)$failed > 0)) {
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+    - name: Run Accessibility Tests
+      if: matrix.test_suite == 'accessibility' && runner.os == 'Linux'
+      run: |
+        export DISPLAY=:99
+        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        library(testthat)
+        test_results <- test_dir("tests/accessibility/", reporter = "junit")
+        if (any(as.data.frame(test_results)$failed > 0)) {
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+    - name: Run Edge Case Tests
+      if: matrix.test_suite == 'edge_cases'
+      run: |
+        library(testthat)
+        test_results <- test_dir("tests/edge_cases/", reporter = "junit")
+        if (any(as.data.frame(test_results)$failed > 0)) {
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.test_suite }}
+        path: |
+          tests/test-results.xml
+          tests/coverage-report/
+          tests/performance-report/
+
+  # ================================================================================
+  # CODE COVERAGE ANALYSIS
+  # ================================================================================
+  coverage:
+    needs: [pre-flight, test]
+    if: needs.pre-flight.outputs.should_run_tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ env.R_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        install.packages(c("covr", "DT", "plotly", "shiny", "testthat"))
+      shell: Rscript {0}
+
+    - name: Generate coverage report
+      run: |
+        library(covr)
+        coverage <- package_coverage(
+          type = "all",
+          quiet = FALSE,
+          clean = FALSE
+        )
+        
+        coverage_percent <- percent_coverage(coverage)
+        cat(sprintf("Coverage: %.2f%%\n", coverage_percent))
+        
+        # Fail if coverage is below threshold
+        if (coverage_percent < as.numeric(Sys.getenv("COVERAGE_THRESHOLD", "85"))) {
+          cat(sprintf("Coverage %.2f%% is below threshold %s%%\n", 
+                     coverage_percent, Sys.getenv("COVERAGE_THRESHOLD")))
+          quit(status = 1)
+        }
+        
+        # Generate reports
+        to_cobertura(coverage, "coverage.xml")
+        
+        # Create HTML report
+        report <- coverage_to_cobertura(coverage)
+        writeLines(report, "coverage-report.html")
+      shell: Rscript {0}
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: atlas-labs-coverage
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: |
+          coverage.xml
+          coverage-report.html
+
+  # ================================================================================
+  # VISUAL REGRESSION TESTING
+  # ================================================================================
+  visual-regression:
+    needs: [pre-flight, test]
+    if: needs.pre-flight.outputs.should_run_tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ env.R_VERSION }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb google-chrome-stable
+
+    - name: Install dependencies
+      run: |
+        install.packages(c("shinytest2", "vdiffr", "ggplot2", "plotly"))
+      shell: Rscript {0}
+
+    - name: Run visual regression tests
+      run: |
+        export DISPLAY=:99
+        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        
+        library(testthat)
+        library(shinytest2)
+        library(vdiffr)
+        
+        # Run visual regression tests
+        test_results <- test_dir("tests/visual/", reporter = "junit")
+        
+        if (any(as.data.frame(test_results)$failed > 0)) {
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+    - name: Upload visual diffs
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: visual-diffs
+        path: tests/visual/diffs/
+
+  # ================================================================================
+  # PERFORMANCE BENCHMARKING
+  # ================================================================================
+  benchmark:
+    needs: [pre-flight, test]
+    if: needs.pre-flight.outputs.should_run_tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ env.R_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        install.packages(c("microbenchmark", "profvis", "bench"))
+      shell: Rscript {0}
+
+    - name: Run performance benchmarks
+      run: |
+        source("tests/benchmarks/run_benchmarks.R")
+        results <- run_all_benchmarks()
+        
+        # Save benchmark results
+        saveRDS(results, "benchmark-results.rds")
+        
+        # Create performance report
+        create_performance_report(results, "performance-report.html")
+        
+        # Check for performance regressions
+        if (check_performance_regression(results)) {
+          cat("Performance regression detected!\n")
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: |
+          benchmark-results.rds
+          performance-report.html
+
+  # ================================================================================
+  # SECURITY SCANNING
+  # ================================================================================
+  security:
+    needs: [pre-flight, test]
+    if: needs.pre-flight.outputs.should_run_tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: R package security audit
+      run: |
+        install.packages("oysteR")
+        library(oysteR)
+        
+        # Audit installed packages
+        audit_results <- audit_installed_r_pkgs()
+        
+        if (nrow(audit_results) > 0) {
+          cat("Security vulnerabilities found in R packages:\n")
+          print(audit_results)
+          quit(status = 1)
+        }
+      shell: Rscript {0}
+
+  # ================================================================================
+  # DEPLOYMENT READINESS CHECK
+  # ================================================================================
+  deployment-check:
+    needs: [coverage, visual-regression, benchmark, security]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check deployment readiness
+      run: |
+        echo "✅ All tests passed"
+        echo "✅ Coverage threshold met"
+        echo "✅ Visual regression tests passed"
+        echo "✅ Performance benchmarks passed"
+        echo "✅ Security scans passed"
+        echo "🚀 Ready for deployment!"
+
+    - name: Create deployment summary
+      run: |
+        cat > deployment-summary.md << EOF
+        # Atlas Labs HR Analytics - Deployment Summary
+        
+        ## Test Results
+        - ✅ Unit Tests: Passed
+        - ✅ Integration Tests: Passed
+        - ✅ Performance Tests: Passed
+        - ✅ Security Tests: Passed
+        - ✅ Accessibility Tests: Passed
+        - ✅ Edge Case Tests: Passed
+        
+        ## Quality Metrics
+        - Code Coverage: Above ${COVERAGE_THRESHOLD}%
+        - Performance: No regressions detected
+        - Security: No vulnerabilities found
+        - Visual Regression: No UI changes detected
+        
+        ## Deployment Status
+        🚀 **READY FOR PRODUCTION**
+        
+        Commit: ${{ github.sha }}
+        Branch: ${{ github.ref_name }}
+        Timestamp: $(date -u)
+        EOF
+
+    - name: Upload deployment summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-summary
+        path: deployment-summary.md
+
+  # ================================================================================
+  # NOTIFICATION AND REPORTING
+  # ================================================================================
+  notify:
+    needs: [deployment-check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Notify on success
+      if: needs.deployment-check.result == 'success'
+      run: |
+        echo "🎉 All regression tests passed successfully!"
+        echo "Atlas Labs HR Analytics is ready for deployment."
+
+    - name: Notify on failure
+      if: needs.deployment-check.result == 'failure'
+      run: |
+        echo "❌ Regression tests failed!"
+        echo "Please check the test results and fix issues before deployment."
+        exit 1
+
+# ================================================================================
+# TEST CONFIGURATION FILES
+# ================================================================================
